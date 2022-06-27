@@ -2,6 +2,7 @@
 
 This is an implementation of [SinGAN](https://arxiv.org/abs/1905.01164) on Python 3 and Tensorflow 2. 
 
+In this fork @maxwnewcomer has addeed the capability for Sparse input data.
 
 SinGAN is an unconditional generative model that can be learned from a single natural image, and is then able to generate diverse realistic image samples with new object shapes and structures while preserving the original image distribution, making it very useful in various image manipulation tasks.
 
