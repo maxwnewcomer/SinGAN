@@ -67,7 +67,7 @@ def main():
     elif args.command == 'inference':
         assert os.path.exists(args.image), 'Reference image not found !'
         assert os.path.exists(args.dir), "Model doesn't exist, please train first"
-        assert (args.mode == 'random_sample') or (args.mode == 'harmonization') or (args.mode == 'paint2image') or (args.mode == 'editing'), 'Inference mode: random_sample, harmonization, paint2image, editing'
+        assert (args.mode == 'random_sample') or (args.mode == 'sparse_inject') or (args.mode == 'harmonization') or (args.mode == 'paint2image') or (args.mode == 'editing'), 'Inference mode: random_sample, harmonization, paint2image, editing'
         assert args.inject_scale >= 0
         assert args.image_size >= 0
 

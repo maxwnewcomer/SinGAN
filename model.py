@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Conv2D, ReLU, LeakyReLU
@@ -62,6 +62,7 @@ class Generator(Model):
     def call(self, prev, noise):
         prev_pad = self.padding(prev)
         noise_pad = self.padding(noise)
+        
         x = Add()([prev_pad, noise_pad])
         x = self.head(x)
         x = self.convblock1(x)
@@ -69,7 +70,6 @@ class Generator(Model):
         x = self.convblock3(x)
         x = self.tail(x)
         x = Add()([x, prev])
-
         return x
 
 

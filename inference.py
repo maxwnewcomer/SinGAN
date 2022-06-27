@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import tensorflow as tf
-
+from tensorflow.math import add as Add
+from tensorflow.math import multiply as Multiply
+from tensorflow.math import exp as Exp
 from model import Generator
 from utils import load_image, imsave, imresize, normalize_m11, create_dir
 
@@ -26,8 +28,8 @@ class Inferencer:
     def load_model(self, checkpoint_dir):
         """ Load generators and NoiseAmp from checkpoint_dir """
         self.NoiseAmp = np.load(checkpoint_dir + '/NoiseAmp.npy')
-        dir = os.walk(checkpoint_dir)
-        for path, dir_list, _ in dir:
+        _dir = os.walk(checkpoint_dir)
+        for path, dir_list, _ in _dir:
             for dir_name in dir_list:
                 network = dir_name[0]
                 scale = int(dir_name[1])
@@ -45,18 +47,23 @@ class Inferencer:
         """
         reference_image = load_image(reference_image, image_size=image_size)
         reference_image = normalize_m11(reference_image)
+        reference_image = tf.math.multiply(tf.cast(tf.math.greater(reference_image, -1), tf.float32), reference_image)
         reals = self.create_real_pyramid(reference_image, num_scales=len(self.model))
 
-        dir = create_dir(os.path.join(self.result_dir, mode))
+        _dir = create_dir(os.path.join(self.result_dir, mode))
         if mode == 'random_sample':
             z_fixed = tf.random.normal(reals[0].shape)
             for n in range(self.num_samples):
                 fake = self.SinGAN_generate(reals, z_fixed, inject_scale=self.inject_scale)
-                imsave(fake, dir + f'/random_sample_{n}.jpg') 
+                imsave(fake, _dir + f'/random_sample_{n}.jpg') 
 
         elif (mode == 'harmonization') or (mode == 'editing') or (mode == 'paint2image'):
             fake = self.SinGAN_inject(reals, inject_scale=self.inject_scale)
-            imsave(fake, dir + f'/inject_at_{self.inject_scale}.jpg') 
+            imsave(fake, _dir + f'/inject_at_{self.inject_scale}.jpg')
+        
+        elif mode == 'sparse_inject':
+            fake = self.SinGAN_sparse_inject(reals, inject_scale=self.inject_scale)
+            imsave(fake, _dir + f'/spare_inject_at_{self.inject_scale}.jpg')
 
         else:
             print('Inference mode must be: random_sample, harmonization, paint2image, editing')
@@ -73,7 +80,40 @@ class Inferencer:
             fake = self.model[scale](fake, z)
     
         return fake
-
+    
+#     @tf.function
+    def SinGAN_sparse_inject(self, reals, inject_scale):
+        """ Inject reference data at given scale after normal random generation"""
+        fake = tf.zeros_like(reals[0])
+        num_scales = len(reals)
+        
+        for scale, generator in enumerate(self.model):
+            if scale >= inject_scale:
+                amplitude = self.inject_amp(scale, num_scales)
+#                 Get inverse binary mask of values in sparse data
+                mask = tf.cast(tf.math.logical_not(tf.math.greater(reals[scale], 0)), tf.float32)
+#                 Adjust amplitude of mask for future injection
+                mask = Add(mask, Multiply(tf.cast(1 - amplitude, tf.float32), tf.cast(tf.math.greater(reals[scale], 0), tf.float32)))
+                fake = imresize(fake, new_shapes=reals[scale].shape)
+#                 Inject with amplification adjustment
+                fake = Add(Multiply(mask, fake), Multiply(tf.cast(amplitude, tf.float32), reals[scale]))
+            else:    
+                fake = imresize(fake, new_shapes=reals[scale].shape)
+            
+            z = tf.random.normal(fake.shape)
+            z = z * self.NoiseAmp[scale]
+            fake = generator(fake, z)
+            self.save_scale(fake, scale)
+    
+        return fake
+    
+    def save_scale(self, fake, scale):
+        _dir = os.path.join(self.result_dir, 'sparse_inject')
+        imsave(fake, _dir + f'/scaled_injection_scale_{scale}.jpg')
+    
+    def inject_amp(self, scale, num_scales):
+#         Essentially flipped sigmoid curve centered at middle of num_scales
+        return -1*(1 / (1 + Exp(-(1.0*scale - .5*num_scales)))) + 1
 
     @tf.function
     def SinGAN_generate(self, reals, z_fixed, inject_scale=0):
